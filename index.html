@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0, user-scalable=no">
+    <title>Forms Recoder</title>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&display=swap"
+          rel="stylesheet">
+    <link href="css/index.min.css" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <article>
+            <div class="logo"></div>
+            <div class="actions">
+                <input type="file" id="srcFile" accept=".xlsx">
+                <input type="submit" id="download" value="Download" />
+                <button id="reset">Reset</button>
+            </div>
+        </article>
+    </header>
+    <main>
+        <div class="loading"><label><span>Loading...</span></label></div>
+        <div class="excel blank">
+            <label for="srcFile"><span>Drag and drop an Excel file here to begin.<br>You can also click here or use the Browse button to add a file.</span></label>
+        </div>
+        <aside class="with-selected-cols">
+            <article>
+                <strong>Selected Columns: <button id="clear-cols">Unselect all</button></strong>
+                <div id="selectedCols"></div>
+            </article>
+            <article>
+                <strong>Transformations: <button id="apply-transformation">Apply</button></strong>
+                <form id="transformations"></form>
+            </article>
+        </aside>
+        <aside class="no-selected-cols">
+            <span>Select columns to begin.</span>
+        </aside>
+    </main>
+    <footer>
+        <a class="github" href="https://github.com/AMoo-Miki/recoder.barahmand.com" target="_blank" rel="noopener noreferrer">Fork on</a>
+        <div class="attrib">Background: "Open book" by <a href="https://www.freepik.com/free-photo/symbols-come-out-bulb-top-book_985250.htm" target="_blank" rel="noopener noreferrer">jannoon028 </a> / Freepik</div>
+    </footer>
+    <script lang="javascript" src="https://cdn.sheetjs.com/xlsx-0.18.7/package/dist/xlsx.full.min.js"></script>
+    <script src="js/index.min.js"></script>
+</body>
+</html>
