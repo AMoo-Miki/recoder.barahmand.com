@@ -16,7 +16,7 @@ html {
 input, button, body {
     font-family: 'IBM Plex Sans', sans-serif;
     font-size: 1.1rem;
-    line-height: 1.2em;
+    line-height: 1.2;
     text-rendering: optimizeLegibility;
     -moz-font-feature-settings: "liga" on;
     -webkit-font-smoothing: antialiased;
@@ -432,6 +432,7 @@ input[type="number"] {
     padding: 0 3px 1px 3px;
     vertical-align: baseline;
     width: 70px;
+    line-height: 1.5rem;
     margin: .25rem 0;
     text-align: center;
 }
