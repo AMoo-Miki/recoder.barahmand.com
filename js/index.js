@@ -51,11 +51,7 @@ const updateCSS = () => {
 
 const recode = (cols, transformations) => {
     const colIndices = cols.split(',');
-    rawData.forEach((row, idx) => {
-        colIndices.forEach(colIdx => {
-            finalData[idx][colIdx] = transformations.get(rawData[idx][colIdx].lower);
-        });
-    });
+    RecoderLib.applyRecode(finalData, rawData, colIndices, transformations);
 
     render();
 };
@@ -79,23 +75,13 @@ const loadFile = async selectedFile => {
     filename = selectedFile.name;
     workbook = XLSX.read(await selectedFile.arrayBuffer());
     worksheet = workbook.Sheets[Object.keys(workbook.Sheets)[0]];
-    const data = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, defval: '', blankrows: false })
-        .map(row => row.map(col => col.trim()));
-    const [columns, ...rest] = data;
+    const { headers, rows } = RecoderLib.parseSheetData(worksheet);
     rawData.splice(0, rawData.length);
-    rawData.push(...rest.map(cols => cols.map(value => ({ value, lower: value?.toLowerCase() || '' }))));
+    rawData.push(...RecoderLib.cookRows(rows));
     finalData.splice(0, finalData.length);
-    finalData.push(...rest);
+    finalData.push(...rows);
     columnData.splice(0, columnData.length);
-    const colData = columns.map((label, idx) => {
-        const values = new Map();
-        rawData.forEach(row => {
-            if (row[idx].lower && !values.has(row[idx].lower))
-                values.set(row[idx].lower, row[idx].value);
-        });
-        return { label, idx, values };
-    });
-    columnData.push(...colData);
+    columnData.push(...RecoderLib.buildColumnData(headers, rawData));
 
     render();
     updateCSS();
@@ -120,24 +106,11 @@ const updateSelections = () => {
         const selectionList = selectedCols.map(col => `<a>${col.label}</a>`).join('');
         const colsFrag = document.createRange().createContextualFragment(selectionList);
 
-        const values = new Map();
         const selectedIndices = selectedCols.map(col => col.idx);
+        const values = RecoderLib.collectValuesForSelection(columnData, selectedIndices);
 
-        /*
-        rawData.forEach(row => {
-            selectedIndices.forEach(idx => {
-                if (row[idx].lower && !values.has(row[idx].lower))
-                    values.set(row[idx].lower, row[idx].value);
-            });
-        });
-         */
-
-        selectedIndices.forEach(idx => {
-            columnData[idx].values.forEach((value, key) => values.set(key, value));
-        });
-
-        const texts = Array.from(values.values()).sort()
-            .map((text, i) => `<div><input type="number" value="${i + 1}" name="${text.toLowerCase().replace(/"/g, '&quot;')}"><label>${text}</label></div>`)
+        const texts = RecoderLib.generateTransformationItems(values)
+            .map(({ key, label, code }) => `<div><input type="number" value="${code}" name="${key.replace(/"/g, '&quot;')}"><label>${label}</label></div>`)
             .join('');
 
         const frag = document.createRange().createContextualFragment(texts + `<input name="cols" type="hidden" value="${selectedIndices.join(',')}" />`);
@@ -268,14 +241,7 @@ document.querySelector('#apply-transformation').addEventListener('click', e => {
 
 document.querySelector('#download').addEventListener('click', e => {
     e.preventDefault();
-    const range = XLSX.utils.decode_range(worksheet["!ref"]);
-    for (let R = range.s.r + 1; R <= range.e.r; ++R) {
-        for (let C = range.s.c; C <= range.e.c; ++C) {
-            const addr = XLSX.utils.encode_cell({ r: R, c: C });
-            if (!worksheet[addr] || finalData[R - 1]?.[C] === undefined) continue;
-            worksheet[addr].v = finalData[R - 1][C];
-        }
-    }
+    RecoderLib.writeFinalDataToWorksheet(worksheet, finalData);
 
     XLSX.writeFile(workbook, filename.replace(/\.[^.]*$/, '') + '-recoded.xlsx', { compression: true, type: 'xlsx' });
 });
