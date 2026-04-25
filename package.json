@@ -9,7 +9,10 @@
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:coverage": "vitest run --coverage",
-    "serve": "npx --yes http-server . -p 8765 -c-1 --silent"
+    "build": "node scripts/build.mjs",
+    "build:clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "serve": "npx --yes http-server . -p 8765 -c-1 --silent",
+    "serve:dist": "npx --yes http-server dist -p 8765 -c-1 --silent"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.1.5",

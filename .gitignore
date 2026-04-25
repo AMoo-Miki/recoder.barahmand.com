@@ -11,3 +11,6 @@ test-results.json
 
 # Vitest coverage output
 /coverage
+
+# Build output (rebuilt by CI on every push)
+/dist
