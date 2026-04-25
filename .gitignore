@@ -1,1 +1,13 @@
 /*.cmd
+/node_modules
+.playwright-mcp/
+test-results.json
+
+# Debugging/screenshot artifacts at the repo root.
+# (img/*.png and other tracked assets are unaffected.)
+/*.png
+/*.jpg
+/*.jpeg
+
+# Vitest coverage output
+/coverage
