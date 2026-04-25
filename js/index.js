@@ -14,18 +14,45 @@ let worksheet;
 let filename;
 let updateSelectionsFrame;
 
+const makeAbbr = (text, classes, title, dataset) => {
+    const el = document.createElement('abbr');
+    el.classList.add(...classes);
+    el.title = title;
+    if (dataset) Object.entries(dataset).forEach(([k, v]) => { el.dataset[k] = v; });
+    el.textContent = text;
+    return el;
+};
+
 const render = () => {
     const columnsLength = columnData.length;
-    const headerText = columnData.map((col, i) => `<abbr class="header col-${i % columnsLength % 2 ? 'odd' : 'even'} col-${i % columnsLength}" title="${col.label.replace(/"/g, '&quot;')}" data-idx="${i}">${col.label}</abbr>`).join('');
-    const rowsText = finalData.flat().map((row, i) => `<abbr class="row-${Math.floor(i / columnsLength) % 2 ? 'odd' : 'even'} col-${i % columnsLength % 2 ? 'odd' : 'even'} col-${i % columnsLength}" title="${row?.replace(/"/g, '&quot;')}">${row ?? ''}</abbr>`).join('');
-    const frag = document.createRange().createContextualFragment(headerText + rowsText);
+    const frag = document.createDocumentFragment();
 
-    const selectedClassList = columnData.filter(col => col.selected).map(col => `.col-${col.idx}`);
-    if (selectedClassList.length) {
-        frag.querySelectorAll(selectedClassList.join(', ')).forEach(el => {
-            el.classList.add('selected');
-        });
-    }
+    columnData.forEach((col, i) => {
+        const headerEl = makeAbbr(
+            col.label,
+            ['header', `col-${i % 2 ? 'odd' : 'even'}`, `col-${i}`],
+            col.label,
+            { idx: String(i) },
+        );
+        if (col.selected) headerEl.classList.add('selected');
+        frag.appendChild(headerEl);
+    });
+
+    finalData.flat().forEach((value, i) => {
+        const colIdx = i % columnsLength;
+        const text = value == null ? '' : String(value);
+        const cellEl = makeAbbr(
+            text,
+            [
+                `row-${Math.floor(i / columnsLength) % 2 ? 'odd' : 'even'}`,
+                `col-${colIdx % 2 ? 'odd' : 'even'}`,
+                `col-${colIdx}`,
+            ],
+            text,
+        );
+        if (columnData[colIdx]?.selected) cellEl.classList.add('selected');
+        frag.appendChild(cellEl);
+    });
 
     excelDiv.textContent = '';
     excelDiv.appendChild(frag);
@@ -96,34 +123,77 @@ const selectColumn = (idx, select = true) => {
     updateSelections();
 };
 
+const readExistingCodes = () => {
+    const map = new Map();
+    transformationsForm.querySelectorAll('input[type="number"]').forEach(input => {
+        map.set(input.getAttribute('name'), input.value);
+    });
+    return map;
+};
+
+const buildTransformationsFragment = (items, selectedIndices) => {
+    const frag = document.createDocumentFragment();
+    items.forEach(({ key, label, code }) => {
+        const wrapper = document.createElement('div');
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.value = code;
+        input.name = key;
+        const labelEl = document.createElement('label');
+        labelEl.textContent = label;
+        wrapper.appendChild(input);
+        wrapper.appendChild(labelEl);
+        frag.appendChild(wrapper);
+    });
+    const hidden = document.createElement('input');
+    hidden.type = 'hidden';
+    hidden.name = 'cols';
+    hidden.value = selectedIndices.join(',');
+    frag.appendChild(hidden);
+    return frag;
+};
+
+const buildSelectedColsFragment = selectedCols => {
+    const frag = document.createDocumentFragment();
+    selectedCols.forEach(col => {
+        const a = document.createElement('a');
+        a.textContent = col.label;
+        frag.appendChild(a);
+    });
+    return frag;
+};
+
 const updateSelections = () => {
     const selectedCols = columnData.filter(col => col.selected);
     const hasSelections = selectedCols.length !== 0;
     excelDiv.classList.toggle('no-selections', !hasSelections);
     excelDiv.classList.toggle('has-selections', hasSelections);
 
-    if (hasSelections) {
-        const selectionList = selectedCols.map(col => `<a>${col.label}</a>`).join('');
-        const colsFrag = document.createRange().createContextualFragment(selectionList);
-
-        const selectedIndices = selectedCols.map(col => col.idx);
-        const values = RecoderLib.collectValuesForSelection(columnData, selectedIndices);
-
-        const texts = RecoderLib.generateTransformationItems(values)
-            .map(({ key, label, code }) => `<div><input type="number" value="${code}" name="${key.replace(/"/g, '&quot;')}"><label>${label}</label></div>`)
-            .join('');
-
-        const frag = document.createRange().createContextualFragment(texts + `<input name="cols" type="hidden" value="${selectedIndices.join(',')}" />`);
-        const hiddenCols = transformationsForm.querySelector('input[name="cols"]');
-        if (hiddenCols) hiddenCols.value = selectedIndices.join(',');
-
+    if (!hasSelections) {
         if (updateSelectionsFrame) cancelAnimationFrame(updateSelectionsFrame);
         updateSelectionsFrame = requestAnimationFrame(() => {
-            selectedColumnsList.replaceChildren(colsFrag);
-            if (frag.childNodes.length !== transformationsForm.childNodes.length || !Array.from(frag.childNodes).every((child, i) => child.isEqualNode(transformationsForm.childNodes[i])))
-                transformationsForm.replaceChildren(frag);
+            selectedColumnsList.replaceChildren();
+            transformationsForm.replaceChildren();
         });
+        return;
     }
+
+    const selectedIndices = selectedCols.map(col => col.idx);
+    const values = RecoderLib.collectValuesForSelection(columnData, selectedIndices);
+    const items = RecoderLib.generateTransformationItems(values, readExistingCodes());
+
+    const newForm = buildTransformationsFragment(items, selectedIndices);
+    const newCols = buildSelectedColsFragment(selectedCols);
+
+    if (updateSelectionsFrame) cancelAnimationFrame(updateSelectionsFrame);
+    updateSelectionsFrame = requestAnimationFrame(() => {
+        selectedColumnsList.replaceChildren(newCols);
+        const current = transformationsForm.childNodes;
+        const incoming = Array.from(newForm.childNodes);
+        const same = incoming.length === current.length
+            && incoming.every((child, i) => child.isEqualNode(current[i]));
+        if (!same) transformationsForm.replaceChildren(newForm);
+    });
 };
 
 const getColumnForCell = el => {
@@ -166,6 +236,8 @@ document.getElementById('reset').addEventListener('click', () => {
     excelDiv.className = `excel blank`;
     excelDiv.appendChild(document.createRange().createContextualFragment(`<label for="srcFile"><span>Drag and drop an Excel file here to begin.<br>You can also click here or use the Browse button to add a file.</span></label>`))
     document.body.classList.remove('file-selected');
+    selectedColumnsList.replaceChildren();
+    transformationsForm.replaceChildren();
 }, false);
 
 excelDiv.addEventListener('pointerdown', e => {
@@ -231,7 +303,7 @@ document.querySelector('#clear-cols').addEventListener('click', e => {
 document.querySelector('#apply-transformation').addEventListener('click', e => {
     const data = new Map();
     transformationsForm.querySelectorAll('input[type="number"]').forEach(el => {
-        data.set(el.getAttribute('name').replace(/&quot;/g, '"'), el.value);
+        data.set(el.getAttribute('name'), el.value);
     });
 
     const cols = transformationsForm.querySelector('input[name="cols"]').value;

@@ -60,11 +60,10 @@ describe('parseSheetData', () => {
         expect(rows[1][2]).toBe('');
     });
 
-    it('keeps blank rows as empty-string rows (defval defeats blankrows:false)', () => {
-        // Documented current behaviour: the combination of `defval: ''`
-        // and `blankrows: false` does NOT drop a fully empty row. The row
-        // gets padded to `['']` and survives, which is surprising and
-        // probably a bug — see recoder.bugs.test.js.
+    it('drops fully blank rows (works around defval defeating blankrows:false)', () => {
+        // SheetJS keeps blank rows when `defval: ''` is set, even with
+        // `blankrows: false`. parseSheetData filters them out so they
+        // don't pollute the preview or downstream output.
         const { worksheet } = roundTrip(buildWorkbook([
             ['a'],
             ['x'],
@@ -72,7 +71,7 @@ describe('parseSheetData', () => {
             ['y'],
         ]).workbook);
         const { rows } = Recoder.parseSheetData(worksheet);
-        expect(rows.map(r => r[0])).toEqual(['x', '', 'y']);
+        expect(rows.map(r => r[0])).toEqual(['x', 'y']);
     });
 });
 
@@ -155,14 +154,36 @@ describe('generateTransformationItems', () => {
         expect(items.map(i => i.key)).toEqual(['apple', 'banana', 'cherry']);
     });
 
-    it('sorts case-sensitively by displayed label (current behaviour)', () => {
-        // Uppercase letters sort before lowercase in default JS string compare.
+    it('sorts case-insensitively by displayed label', () => {
+        // 'Apple' and 'banana' should be alphabetic (A before b)
+        // regardless of letter case.
         const values = new Map([
             ['banana', 'banana'],
             ['apple', 'Apple'],
         ]);
         const items = Recoder.generateTransformationItems(values);
         expect(items.map(i => i.label)).toEqual(['Apple', 'banana']);
+    });
+
+    it('preserves prior codes when a priorCodes map is supplied', () => {
+        // First selection assigns codes 1..N over [no, yes].
+        const first = Recoder.generateTransformationItems(new Map([
+            ['no', 'no'],
+            ['yes', 'yes'],
+        ]));
+        const priorMap = new Map(first.map(i => [i.key, i.code]));
+
+        // Adding "maybe" should not renumber "no" or "yes".
+        const second = Recoder.generateTransformationItems(new Map([
+            ['no', 'no'],
+            ['yes', 'yes'],
+            ['maybe', 'maybe'],
+        ]), priorMap);
+
+        const codes = Object.fromEntries(second.map(i => [i.key, i.code]));
+        expect(codes.no).toBe('1');
+        expect(codes.yes).toBe('2');
+        expect(codes.maybe).toBe('3');
     });
 });
 

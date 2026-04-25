@@ -128,8 +128,8 @@ describe('rendering', () => {
     });
 });
 
-describe('BUG: HTML in header text is rendered as markup', () => {
-    it.fails('does not interpret <img onerror> in a header label', async () => {
+describe('header text is rendered as text, not HTML', () => {
+    it('does not interpret <img onerror> in a header label', async () => {
         await bootApp();
         await loadWorkbook([
             ['<img src=x onerror="window.__pwned=true">', 'plain'],
@@ -148,8 +148,8 @@ describe('BUG: HTML in header text is rendered as markup', () => {
     });
 });
 
-describe('BUG: HTML in cell values is rendered as markup', () => {
-    it.fails('does not interpret <script> tags inside data cells', async () => {
+describe('cell values are rendered as text, not HTML', () => {
+    it('does not interpret <b> tags inside data cells', async () => {
         await bootApp();
         await loadWorkbook([
             ['c'],
@@ -184,8 +184,8 @@ describe('reset clears the loaded state', () => {
     });
 });
 
-describe('BUG: Reset leaves stale UI behind', () => {
-    it.fails('clears the transformations form on Reset', async () => {
+describe('Reset clears the transformations form', () => {
+    it('drops form inputs and selected-column tags on Reset', async () => {
         await bootApp();
         await loadWorkbook([['Color'], ['red'], ['blue']]);
         document.querySelector('.excel abbr.header[data-idx="0"]')
@@ -202,8 +202,8 @@ describe('BUG: Reset leaves stale UI behind', () => {
     });
 });
 
-describe('BUG: Unselect-all leaves stale transformations form', () => {
-    it.fails('clears the form when the last selected column is removed', async () => {
+describe('Unselect-all clears the transformations form', () => {
+    it('clears the form when the last selected column is removed', async () => {
         await bootApp();
         await loadWorkbook([['Color'], ['red'], ['blue']]);
         document.querySelector('.excel abbr.header[data-idx="0"]')

@@ -246,9 +246,9 @@ window.__runTests = async function () {
     falsy ('H1 file-selected cleared', s.bodyClasses.includes('file-selected'));
     // Reset clears the grid but the transformations form is never
     // touched, so any previous codes survive across files. Bug.
-    eq    ('H2 BUG: transformations form cleared on Reset',
+    eq    ('H2 transformations form cleared on Reset',
       s.transformations.length, 0);
-    eq    ('H2 BUG: selected-columns sidebar cleared on Reset',
+    eq    ('H2 selected-columns sidebar cleared on Reset',
       s.selectedColsList.length, 0);
   }
 
@@ -261,10 +261,10 @@ window.__runTests = async function () {
   // ============================================================
   clickReset();
   await loadXlsx([
-    ['Color'],
-    ['red'],
-    [''],
-    ['blue'],
+    ['Color', 'Note'],
+    ['red',   'a'],
+    ['',      'b'],
+    ['blue',  'c'],
   ]);
   selectColumnByIdx(0);
   await sleep(40);
@@ -272,11 +272,15 @@ window.__runTests = async function () {
   await sleep(40);
   {
     const s = readState();
-    // Sorted: blue=1, red=2. Middle row was empty.
-    eq('I1 empty cell renders as empty string after recode',
-      s.cells[1], '');
-    eq('I1 non-empty cells get codes',
-      [s.cells[0], s.cells[2]], ['2', '1']);
+    // Cells are flattened row-major: [red, a, '', b, blue, c].
+    // After recode of column 0 (sorted: blue=1, red=2):
+    //   [2, a, '', b, 1, c]
+    eq('I1 empty cell in non-blank row stays empty after recode',
+      s.cells[2], '');
+    eq('I1 unselected column is left alone',
+      [s.cells[1], s.cells[3], s.cells[5]], ['a', 'b', 'c']);
+    eq('I1 selected column non-empty cells get codes',
+      [s.cells[0], s.cells[4]], ['2', '1']);
   }
 
   // ============================================================
@@ -290,8 +294,8 @@ window.__runTests = async function () {
   await sleep(50);
   {
     const injected = $('.excel abbr.header img');
-    truthy('J1 BUG: header HTML not interpreted as markup', injected === null);
-    falsy ('J1 BUG: header onerror did not fire', !!window.__pwned_e2e);
+    truthy('J1 header HTML not interpreted as markup', injected === null);
+    falsy ('J1 header onerror did not fire', !!window.__pwned_e2e);
   }
 
   // ============================================================
@@ -305,9 +309,9 @@ window.__runTests = async function () {
   await sleep(50);
   {
     const cell = $('.excel abbr:not(.header)');
-    truthy('K1 BUG: cell HTML not interpreted as markup',
+    truthy('K1 cell HTML not interpreted as markup',
       cell && cell.querySelector('b') === null);
-    eq    ('K1 BUG: cell text content matches literal',
+    eq    ('K1 cell text content matches literal',
       cell && cell.textContent, '<b>bold</b>');
   }
 
@@ -324,7 +328,7 @@ window.__runTests = async function () {
   {
     const s = readState();
     // Today: cells = ['x', '', 'y']. After fix: cells = ['x', 'y'].
-    truthy('L1 BUG: blank rows are dropped from preview',
+    truthy('L1 blank rows are dropped from preview',
       s.cells.length === 2 && s.cells[0] === 'x' && s.cells[1] === 'y');
   }
 
@@ -347,7 +351,7 @@ window.__runTests = async function () {
   clickApply();
   await sleep(40);
   const colASecond = readState().cells.filter((_, i) => i % 2 === 0);
-  truthy('M1 BUG: column A codes stable across selection-add + re-apply',
+  truthy('M1 column A codes stable across selection-add + re-apply',
     JSON.stringify(colAFirst) === JSON.stringify(colASecond));
 
   // ============================================================
@@ -398,7 +402,7 @@ window.__runTests = async function () {
     // updateSelections() only refreshes the form when there are still
     // selected columns, so unselecting everything leaves the previous
     // form (and its hidden cols field) in place. Bug.
-    eq('O2 BUG: transformations form cleared by Unselect-all',
+    eq('O2 transformations form cleared by Unselect-all',
       s.transformations.length, 0);
   }
 

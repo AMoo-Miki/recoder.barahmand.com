@@ -4,24 +4,14 @@ import Recoder from '../../js/lib/recoder.js';
 import { buildWorkbook, roundTrip } from '../helpers/fixtures.js';
 
 /**
- * Failing tests that document suspected bugs in the current behaviour.
- * Each test states what the user-facing outcome SHOULD be.
- *
- * Each `it.fails()` is **expected to fail** today — Vitest inverts the
- * status so the suite stays green while the bug is open. When the bug
- * gets fixed, the now-passing assertion will make `it.fails()` itself
- * fail in CI, prompting whoever fixed it to flip `.fails` off.
- *
- * Don't relax the assertions to make them pass. Don't add `.fails()` to
- * a test that already passes today — those go in the regular suite.
+ * Regression tests for previously-shipped bugs. Each test pins down the
+ * *fixed* behaviour. If one of these starts failing, somebody has
+ * re-introduced the bug — please push back rather than relaxing the
+ * assertion.
  */
 
-describe('BUG: empty source cells are recoded to undefined instead of being preserved', () => {
-    it.fails('keeps an empty cell empty (or original) after applyRecode', () => {
-        // The user codes "yes" -> 1 and "no" -> 2. A row with an empty
-        // value in the recoded column should not be silently turned into
-        // the string "undefined" or get lost — it should round-trip as
-        // empty.
+describe('empty source cells survive recode unchanged', () => {
+    it('keeps an empty cell empty after applyRecode', () => {
         const cooked = Recoder.cookRows([
             ['yes'],
             [''],
@@ -32,19 +22,14 @@ describe('BUG: empty source cells are recoded to undefined instead of being pres
 
         Recoder.applyRecode(finalData, cooked, [0], transformations);
 
-        // Today: finalData becomes [['1'], [undefined], ['2']]
-        // Expected: empty stays empty (or otherwise non-undefined).
-        expect(finalData[1][0]).not.toBeUndefined();
+        expect(finalData[0][0]).toBe('1');
         expect(finalData[1][0]).toBe('');
+        expect(finalData[2][0]).toBe('2');
     });
 });
 
-describe('BUG: download keeps cell .t even though .v changes type', () => {
-    it.fails('preserves numeric/boolean cell type info when recoding to a numeric code', () => {
-        // A score column holds real numbers in the source xlsx. After
-        // recoding (e.g. 95 -> 1, 70 -> 2), the codes are conceptually
-        // numbers but the app writes them as strings while leaving
-        // .t = 'n'. Downstream tools that read .t will be confused.
+describe('download keeps cell .t and .v in sync', () => {
+    it('flips .t to "s" when overwriting a numeric cell with a string code', () => {
         const { worksheet } = roundTrip(buildWorkbook([
             ['Score'],
             [95],
@@ -57,9 +42,6 @@ describe('BUG: download keeps cell .t even though .v changes type', () => {
 
         Recoder.writeFinalDataToWorksheet(worksheet, [['1'], ['2']]);
 
-        // Today: .t is still 'n' but .v is the string '1'. That mismatch
-        // is the bug. Either .t should be flipped to 's', or .v should
-        // be coerced to a Number — but the two should agree.
         if (worksheet['A2'].t === 'n') {
             expect(typeof worksheet['A2'].v).toBe('number');
         } else {
@@ -68,9 +50,6 @@ describe('BUG: download keeps cell .t even though .v changes type', () => {
     });
 
     it('downloaded file round-trips correctly for a recoded numeric column', () => {
-        // Real-world manifestation of the .t / .v mismatch: write the
-        // recoded workbook back to xlsx bytes, re-read it the same way
-        // the app reads input files, and confirm the codes survive.
         const { workbook } = buildWorkbook([
             ['Score'],
             [95],
@@ -93,15 +72,11 @@ describe('BUG: download keeps cell .t even though .v changes type', () => {
         const out = XLSX.utils.sheet_to_json(fws, { header: 1, raw: false, defval: '' });
 
         // Sorted display labels are ['70','95'] -> codes '1','2'.
-        // After re-read, the cells should still show those codes.
         expect(out[1][0]).toBe('2'); // 95 -> 2
         expect(out[2][0]).toBe('1'); // 70 -> 1
     });
 
-    it.fails('clears .w (the cached formatted text) when overwriting .v', () => {
-        // Some readers (and SheetJS itself in some paths) prefer .w over
-        // .v when displaying cells. Failing to clear it means the
-        // downloaded file may visually still show the original value.
+    it('clears .w (the cached formatted text) when overwriting .v', () => {
         const { worksheet } = roundTrip(buildWorkbook([
             ['Score'],
             [95],
@@ -110,13 +85,12 @@ describe('BUG: download keeps cell .t even though .v changes type', () => {
 
         Recoder.writeFinalDataToWorksheet(worksheet, [['1']]);
 
-        // Expected: .w cleared (or updated to match the new .v).
         expect(worksheet['A2'].w === undefined || worksheet['A2'].w === '1').toBe(true);
     });
 });
 
-describe('BUG: blank rows survive parsing and pollute the output', () => {
-    it.fails('drops fully blank rows so they do not show up in the recoded preview', () => {
+describe('parseSheetData drops fully blank rows', () => {
+    it('removes blank rows so they do not show up in the recoded preview', () => {
         const { worksheet } = roundTrip(buildWorkbook([
             ['Q'],
             ['x'],
@@ -125,19 +99,12 @@ describe('BUG: blank rows survive parsing and pollute the output', () => {
         ]).workbook);
 
         const { rows } = Recoder.parseSheetData(worksheet);
-        // Today: rows = [['x'], [''], ['y']]
-        // Expected: blank rows dropped (this is what `blankrows: false`
-        // is supposed to do).
         expect(rows.map(r => r[0])).toEqual(['x', 'y']);
     });
 });
 
-describe('BUG: code generation sort is case-sensitive on display label', () => {
-    it.fails('sorts unique values case-insensitively for stable codes', () => {
-        // If the same column has both "apple" and "Banana", the user
-        // probably expects A before B regardless of case. The current
-        // sort uses default JS string compare, so all uppercase letters
-        // sort before all lowercase ones — "Banana" comes before "apple".
+describe('generateTransformationItems sorts case-insensitively', () => {
+    it('orders A before B regardless of letter case', () => {
         const values = new Map([
             ['apple', 'apple'],
             ['banana', 'Banana'],
@@ -147,12 +114,12 @@ describe('BUG: code generation sort is case-sensitive on display label', () => {
     });
 });
 
-describe('BUG: re-applying recode on a different selection silently changes earlier codes', () => {
-    it.fails('does not change codes for previously-recoded columns when adding a new column', () => {
-        // Workflow: user recodes column A alone, getting "yes"->1, "no"->2.
+describe('generateTransformationItems preserves prior codes for stability', () => {
+    it('does not change codes for previously-recoded columns when adding a new column', () => {
+        // Workflow: user recodes column A alone, getting "no"->1, "yes"->2.
         // Then they add column B (which contains "maybe") and re-apply.
-        // The merged code list now includes "maybe", which can re-order
-        // the codes — column A's previously-applied codes silently drift.
+        // The stability guarantee: keys already shown to the user keep
+        // their codes; the new key claims the next unused integer.
         const cooked = Recoder.cookRows([
             ['yes', 'maybe'],
             ['no', 'maybe'],
@@ -168,32 +135,21 @@ describe('BUG: re-applying recode on a different selection silently changes earl
 
         const colAAfterFirstPass = finalData.map(r => r[0]);
 
-        // Second pass: now select A AND B, default codes get recomputed
-        // over the union, then user applies again.
+        // Second pass: now select A AND B. Pass the user-visible codes
+        // from pass 1 into the lib so prior assignments are preserved.
         const valsAB = Recoder.collectValuesForSelection(cols, [0, 1]);
-        const itemsAB = Recoder.generateTransformationItems(valsAB);
+        const itemsAB = Recoder.generateTransformationItems(valsAB, transA);
         const transAB = new Map(itemsAB.map(i => [i.key, i.code]));
         Recoder.applyRecode(finalData, cooked, [0, 1], transAB);
 
         const colAAfterSecondPass = finalData.map(r => r[0]);
 
-        // Expected: column A's codes are stable across the two passes.
-        // Today they drift because the unified sort puts "maybe" between
-        // "no" and "yes" alphabetically, shifting the indices.
         expect(colAAfterSecondPass).toEqual(colAAfterFirstPass);
     });
 });
 
-describe('BUG: header labels and cell values are HTML-injected without escaping', () => {
-    it('parser preserves HTML-like content verbatim (so a renderer fix has stable input)', () => {
-        // The parser path is fine — the bug lives in js/index.js render(),
-        // updateSelections() and selectedCols rendering, all of which
-        // build innerHTML via bare template literals around the parsed
-        // text. A sheet header like `<img src=x onerror=alert(1)>` will
-        // be executed when the file is loaded.
-        //
-        // This test just pins down that the lib does NOT pre-escape, so
-        // any fix must escape at the render layer.
+describe('parser preserves HTML-like content verbatim', () => {
+    it('lets the renderer escape it (the parser stays format-agnostic)', () => {
         const { worksheet } = roundTrip(buildWorkbook([
             ['<b>Bold</b>', 'plain'],
             ['x', 'y'],
@@ -201,10 +157,4 @@ describe('BUG: header labels and cell values are HTML-injected without escaping'
         const { headers } = Recoder.parseSheetData(worksheet);
         expect(headers[0]).toBe('<b>Bold</b>');
     });
-
-    // The actual rendering bugs (header + cell HTML injection) are
-    // covered by the jsdom integration suite in
-    // tests/integration/index.dom.test.js — see "BUG: HTML in header
-    // text is rendered as markup" and "BUG: HTML in cell values is
-    // rendered as markup".
 });
