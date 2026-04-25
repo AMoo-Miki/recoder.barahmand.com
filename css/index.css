@@ -118,6 +118,7 @@ main .loading,
 
     position: relative;
     display: grid;
+    align-content: start;
     overflow-y: auto;
 }
 
