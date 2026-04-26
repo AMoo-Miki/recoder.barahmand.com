@@ -69,6 +69,17 @@ window.__runTests = async function () {
     return false;
   }
 
+  // Wait until the transformations form has exactly `n` number-inputs.
+  // updateSelections schedules its DOM mutation inside requestAnimationFrame,
+  // and headless Linux WebKit can take noticeably longer than 1 frame
+  // to fire it — a fixed sleep is racy. Use a predicate poll instead.
+  async function waitForFormCount(n, timeoutMs = 1500) {
+    return waitFor(
+      () => $$('#transformations input[type="number"]').length === n,
+      timeoutMs,
+    );
+  }
+
   function readState() {
     const excel = $('.excel');
     return {
@@ -225,7 +236,7 @@ window.__runTests = async function () {
   ]);
   selectColumnByIdx(0);
   selectColumnByIdx(1);
-  await sleep(40);
+  await waitForFormCount(3);
   {
     const s = readState();
     eq    ('G1 both headers selected', s.headers.filter(h => h.selected).length, 2);
@@ -392,15 +403,12 @@ window.__runTests = async function () {
   selectColumnByIdx(0);
   selectColumnByIdx(1);
   selectColumnByIdx(2);
-  await sleep(40);
+  await waitForFormCount(3);
   $('#clear-cols').dispatchEvent(new Event('click', { bubbles: true }));
-  await sleep(40);
+  await waitForFormCount(0);
   {
     const s = readState();
     eq('O1 no headers selected after clear', s.headers.filter(h => h.selected).length, 0);
-    // updateSelections() only refreshes the form when there are still
-    // selected columns, so unselecting everything leaves the previous
-    // form (and its hidden cols field) in place. Bug.
     eq('O2 transformations form cleared by Unselect-all',
       s.transformations.length, 0);
   }
