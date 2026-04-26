@@ -185,7 +185,7 @@ window.__runTests = async function () {
     ['green'],
   ]);
   selectColumnByIdx(0);
-  await sleep(40);
+  await waitForFormCount(3);
   {
     const s = readState();
     truthy('D1 header marked selected',
@@ -278,7 +278,7 @@ window.__runTests = async function () {
     ['blue',  'c'],
   ]);
   selectColumnByIdx(0);
-  await sleep(40);
+  await waitForFormCount(2);
   clickApply();
   await sleep(40);
   {
@@ -353,12 +353,12 @@ window.__runTests = async function () {
     ['no', 'maybe'],
   ]);
   selectColumnByIdx(0);
-  await sleep(40);
+  await waitForFormCount(2);
   clickApply();
   await sleep(40);
   const colAFirst = readState().cells.filter((_, i) => i % 2 === 0);
   selectColumnByIdx(1);
-  await sleep(40);
+  await waitForFormCount(3);
   clickApply();
   await sleep(40);
   const colASecond = readState().cells.filter((_, i) => i % 2 === 0);
