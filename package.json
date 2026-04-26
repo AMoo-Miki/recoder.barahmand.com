@@ -16,6 +16,7 @@
     "test:a11y": "vitest run tests/integration/index.a11y.test.js",
     "test:e2e": "playwright test",
     "test:e2e:chromium": "playwright test --project=chromium",
+    "test:e2e:live": "playwright test --config=playwright.live.config.mjs",
     "test:all": "npm run test && npm run test:e2e",
     "fixtures:regenerate": "node tests/fixtures/generate.mjs",
     "build": "node scripts/build.mjs",
