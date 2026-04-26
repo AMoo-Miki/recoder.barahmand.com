@@ -78,13 +78,23 @@
      * sequential numeric codes 1..N to them. Returned items pair the
      * lower-cased lookup key with its proposed code.
      */
+    // Pinned to 'en' so the sort order is deterministic across CI
+    // environments and user locales — the previous implementation called
+    // localeCompare with no locale, which silently changed order based on
+    // the host's Intl default and made tests / round-trips locale-dependent.
+    // sensitivity: 'accent' matches the previous implementation's
+    // (toLowerCase + localeCompare) semantics — case-insensitive but
+    // accent-sensitive, so 'cafe' and 'café' remain distinct entries in
+    // a deterministic order.
+    const SORT_COLLATOR = new Intl.Collator('en', { sensitivity: 'accent' });
+
     function generateTransformationItems(valuesMap, priorCodes) {
         // Sort case-insensitively so 'Banana' and 'apple' end up in
         // alphabetic (rather than ASCII) order. Array.prototype.sort is
         // stable since ES2019, so identical labels keep their insertion
         // order.
         const sorted = Array.from(valuesMap.entries())
-            .sort((a, b) => a[1].toLowerCase().localeCompare(b[1].toLowerCase()));
+            .sort((a, b) => SORT_COLLATOR.compare(a[1], b[1]));
 
         // When the caller supplies `priorCodes` (a Map of key -> code
         // already shown to the user), keep those codes so adding a new

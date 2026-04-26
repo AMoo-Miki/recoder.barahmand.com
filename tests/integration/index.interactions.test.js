@@ -366,6 +366,88 @@ describe('corrupt file does not get the UI stuck on the loading spinner', () => 
     });
 });
 
+// defensive button clicks ---------------------------------------------
+
+describe('apply / download buttons survive being clicked with no state', () => {
+    // jsdom swallows listener exceptions — `dispatchEvent` doesn't
+    // rethrow — but it surfaces them as `error` events on window. To
+    // actually assert no listener crashed we have to capture those
+    // events ourselves.
+    function withErrorCapture(fn) {
+        const errors = [];
+        const onError = (e) => { errors.push(e.error || new Error(e.message)); };
+        window.addEventListener('error', onError);
+        try { fn(); } finally { window.removeEventListener('error', onError); }
+        return errors;
+    }
+
+    it('clicking #apply-transformation with no selected column does not throw', async () => {
+        // The button is hidden via CSS until a column is selected, but
+        // a programmatic click (or a future keyboard wiring) must not
+        // crash the app. Pre-fix: querySelector('input[name="cols"]')
+        // returned null and `.value` threw.
+        await bootApp();
+        await loadWorkbook([['Color'], ['red']]);
+        const errs = withErrorCapture(() => {
+            document.querySelector('#apply-transformation')
+                .dispatchEvent(new window.Event('click', { bubbles: true }));
+        });
+        expect(errs).toEqual([]);
+    });
+
+    it('clicking #download with no file loaded does not throw', async () => {
+        // Pre-fix: `worksheet`, `workbook`, and `filename` are
+        // undefined before any file is loaded; writeFinalDataToWorksheet
+        // would dereference them and crash.
+        await bootApp();
+        const errs = withErrorCapture(() => {
+            document.querySelector('#download')
+                .dispatchEvent(new window.Event('click', { bubbles: true }));
+        });
+        expect(errs).toEqual([]);
+    });
+});
+
+// re-entrancy guard ----------------------------------------------------
+
+describe('file upload re-entrancy guard', () => {
+    it('a second file change while the first is loading is ignored', async () => {
+        // The 1s setTimeout in fileChanged keeps `file-loading` set
+        // while a file is in flight. Dispatching a second change in
+        // that window must not start a parallel load — index.js bails
+        // early when file-loading is already on the body.
+        await bootApp();
+
+        const { workbook: wb1 } = buildWorkbook([['First'], ['a']]);
+        const { workbook: wb2 } = buildWorkbook([['Second'], ['b']]);
+        const buf1 = XLSX.write(wb1, { type: 'array', bookType: 'xlsx' });
+        const buf2 = XLSX.write(wb2, { type: 'array', bookType: 'xlsx' });
+        const file1 = new File([buf1], 'first.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const file2 = new File([buf2], 'second.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+        const input = document.querySelector('#srcFile');
+        Object.defineProperty(input, 'files', { configurable: true, writable: true, value: [file1] });
+
+        vi.useFakeTimers();
+        // First change: arms the load.
+        input.dispatchEvent(new window.Event('change', { bubbles: true }));
+        // Swap in file2 and dispatch a second change WHILE file-loading
+        // is still set (no timer advance yet).
+        Object.defineProperty(input, 'files', { configurable: true, writable: true, value: [file2] });
+        expect(document.body.classList.contains('file-loading')).toBe(true);
+        input.dispatchEvent(new window.Event('change', { bubbles: true }));
+        // Now let the first load complete.
+        await vi.advanceTimersByTimeAsync(1100);
+        vi.useRealTimers();
+        await new Promise(r => setTimeout(r, 0));
+
+        // Grid should show file1's header, not file2's.
+        const headers = Array.from(document.querySelectorAll('.excel abbr.header'))
+            .map(el => el.textContent);
+        expect(headers).toEqual(['First']);
+    });
+});
+
 // re-loading a different file resets state -----------------------------
 
 describe('re-upload replaces previous workbook state', () => {

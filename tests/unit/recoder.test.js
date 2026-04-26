@@ -165,6 +165,24 @@ describe('generateTransformationItems', () => {
         expect(items.map(i => i.label)).toEqual(['Apple', 'banana']);
     });
 
+    it('uses a deterministic en-locale sort regardless of host locale', () => {
+        // Regression: an earlier implementation used .localeCompare with
+        // no locale argument, so the order of mixed-script labels (and
+        // accented vs. unaccented letters) silently followed the host's
+        // Intl default. We now pin the collator to 'en' with
+        // sensitivity: 'accent' so the order is the same on every CI
+        // runner and every user browser.
+        const values = new Map([
+            ['résumé', 'résumé'],
+            ['resume', 'resume'],
+            ['banana', 'Banana'],
+            ['apple', 'apple'],
+        ]);
+        const items = Recoder.generateTransformationItems(values);
+        // 'apple' < 'banana' < 'resume' < 'résumé' under en + accent.
+        expect(items.map(i => i.label)).toEqual(['apple', 'Banana', 'resume', 'résumé']);
+    });
+
     it('preserves prior codes when a priorCodes map is supplied', () => {
         // First selection assigns codes 1..N over [no, yes].
         const first = Recoder.generateTransformationItems(new Map([

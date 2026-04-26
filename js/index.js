@@ -313,6 +313,13 @@ document.querySelector('#clear-cols').addEventListener('click', e => {
 });
 
 document.querySelector('#apply-transformation').addEventListener('click', e => {
+    // Defensive: the button is hidden via CSS unless a column is
+    // selected, but a programmatic click (or a future keyboard path)
+    // must not crash the app — bail out cleanly when there's nothing
+    // to apply.
+    const colsInput = transformationsForm.querySelector('input[name="cols"]');
+    if (!colsInput) return;
+
     const data = new Map();
     transformationsForm.querySelectorAll('input[type="number"]').forEach(el => {
         // Coerce to Number so the value lands in finalData as a numeric
@@ -328,13 +335,16 @@ document.querySelector('#apply-transformation').addEventListener('click', e => {
         data.set(el.getAttribute('name'), num);
     });
 
-    const cols = transformationsForm.querySelector('input[name="cols"]').value;
-
-    recode(cols, data);
+    recode(colsInput.value, data);
 });
 
 document.querySelector('#download').addEventListener('click', e => {
     e.preventDefault();
+    // Defensive: hidden via CSS until a file is loaded, but a
+    // programmatic click before that would otherwise dereference an
+    // undefined worksheet/workbook/filename.
+    if (!worksheet || !workbook || !filename) return;
+
     RecoderLib.writeFinalDataToWorksheet(worksheet, finalData);
 
     XLSX.writeFile(workbook, filename.replace(/\.[^.]*$/, '') + '-recoded.xlsx', { compression: true, type: 'xlsx' });
