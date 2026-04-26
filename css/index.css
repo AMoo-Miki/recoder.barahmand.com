@@ -107,6 +107,16 @@ main .loading,
     display: grid;
 }
 
+/* Prevent a second file pick from racing with an in-flight load. The
+   drop zone is already hidden via `.file-loading main > *:not(.loading)`
+   above, so DnD is naturally disabled. The file input lives in the
+   header (outside `main`), so we gray it out and block pointer events
+   here. The JS path also re-enters-guards in `fileChanged`. */
+.file-loading #srcFile {
+    pointer-events: none;
+    opacity: .5;
+}
+
 .excel, .loading {
     flex-shrink: 0;
     flex-grow: 0;

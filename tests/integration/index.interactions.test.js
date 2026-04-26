@@ -47,8 +47,12 @@ async function bootApp() {
     };
 
     document.body.innerHTML = bodyMarkupFromIndexHtml();
-    globalThis.XLSX = XLSX;
-    window.XLSX = XLSX;
+    // The XLSX import is a frozen ESM namespace, but several tests need
+    // to stub methods (e.g. writeFile, read) — wrap in a shallow copy
+    // that's mutable.
+    const xlsxWrap = Object.assign({}, XLSX);
+    globalThis.XLSX = xlsxWrap;
+    window.XLSX = xlsxWrap;
     const RecoderLib = (await import('../../js/lib/recoder.js')).default;
     globalThis.RecoderLib = RecoderLib;
     window.RecoderLib = RecoderLib;
@@ -282,6 +286,83 @@ describe('toggle-off-last-column', () => {
         expect(document.querySelectorAll('#transformations input[type="number"]').length).toBe(0);
         expect(document.querySelectorAll('#selectedCols a').length).toBe(0);
         expect(document.querySelector('.excel').classList.contains('no-selections')).toBe(true);
+    });
+});
+
+// numeric output -------------------------------------------------------
+
+describe('recoded values are written as numbers, not strings', () => {
+    it('saved workbook cells have cell.t === "n" with numeric .v', async () => {
+        // Bug: the apply-transformation handler reads input.value (a
+        // string) and stores '1', '2', ... in the transformation Map.
+        // applyRecode then writes those strings into finalData, and
+        // writeFinalDataToWorksheet types them as 's'. Researchers
+        // opening the output in SPSS / R / Excel see codes as text,
+        // which silently breaks downstream stats. Fix: coerce to
+        // Number before applying.
+        await bootApp();
+        await loadWorkbook([['Color'], ['red'], ['blue'], ['red']]);
+
+        const header = document.querySelector('.excel abbr.header[data-idx="0"]');
+        header.dispatchEvent(new window.Event('pointerdown', { bubbles: true }));
+        header.dispatchEvent(new window.Event('pointerup', { bubbles: true }));
+        // Apply with the default codes (blue=1, red=2).
+        document.querySelector('#apply-transformation')
+            .dispatchEvent(new window.Event('click', { bubbles: true }));
+
+        // Capture the workbook by spying on XLSX.writeFile (the real
+        // implementation tries to write to disk / trigger a browser
+        // download, neither of which works in jsdom).
+        let captured = null;
+        const origWriteFile = window.XLSX.writeFile;
+        window.XLSX.writeFile = (wb) => { captured = wb; };
+        try {
+            document.querySelector('#download')
+                .dispatchEvent(new window.Event('click', { bubbles: true }));
+        } finally {
+            window.XLSX.writeFile = origWriteFile;
+        }
+
+        expect(captured).not.toBeNull();
+        const ws = captured.Sheets[Object.keys(captured.Sheets)[0]];
+        ['A2', 'A3', 'A4'].forEach(addr => {
+            expect(ws[addr].t).toBe('n');
+            expect(typeof ws[addr].v).toBe('number');
+        });
+    });
+});
+
+// loading-state recovery -----------------------------------------------
+
+describe('corrupt file does not get the UI stuck on the loading spinner', () => {
+    it('removes the file-loading class even when XLSX.read throws', async () => {
+        // Bug: loadFile awaits XLSX.read with no try/catch. A corrupt
+        // upload makes the await reject; the requestAnimationFrame that
+        // strips `file-loading` never runs, and the spinner stays
+        // forever. Fix: try/finally that always strips the class.
+        await bootApp();
+        const origRead = window.XLSX.read;
+        window.XLSX.read = () => { throw new Error('Bad file format'); };
+        // Pre-fix code produces an unhandled rejection out of the
+        // setTimeout callback; suppress it so vitest doesn't kill the
+        // run while we observe the latent bug.
+        const swallow = () => {};
+        process.on('unhandledRejection', swallow);
+        try {
+            const file = new File([new Uint8Array([1, 2, 3])], 'bad.xlsx');
+            const input = document.querySelector('#srcFile');
+            Object.defineProperty(input, 'files', { value: [file], configurable: true });
+            vi.useFakeTimers();
+            input.dispatchEvent(new window.Event('change', { bubbles: true }));
+            await vi.advanceTimersByTimeAsync(1100);
+            vi.useRealTimers();
+            // Let any pending microtasks settle.
+            await new Promise(r => setTimeout(r, 10));
+            expect(document.body.classList.contains('file-loading')).toBe(false);
+        } finally {
+            window.XLSX.read = origRead;
+            process.removeListener('unhandledRejection', swallow);
+        }
     });
 });
 

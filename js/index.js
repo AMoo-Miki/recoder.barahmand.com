@@ -85,14 +85,23 @@ const recode = (cols, transformations) => {
 
 const fileChanged = selectedFile => {
     if (!selectedFile) return;
+    // Re-entrancy guard: ignore a second selection while the first is
+    // still loading. Mirrors the existing check in the drop handler so
+    // both upload paths agree on a single source of truth.
+    if (document.body.classList.contains('file-loading')) return;
 
     document.body.classList.add('file-selected', 'file-loading');
 
     setTimeout(async () => {
-        await loadFile(selectedFile);
-        requestAnimationFrame(() => {
-            document.body.classList.remove('file-loading');
-        });
+        try {
+            await loadFile(selectedFile);
+        } catch (err) {
+            console.error('Failed to load workbook:', err);
+        } finally {
+            requestAnimationFrame(() => {
+                document.body.classList.remove('file-loading');
+            });
+        }
     }, 1000);
 }
 
@@ -257,11 +266,10 @@ excelDiv.addEventListener('pointerdown', e => {
 });
 
 document.addEventListener('pointerup', e => {
-    // pointerup fires anywhere on the document, including on the bare
-    // Document node (e.g. when the user lifts their finger after a drag
-    // that started on the page chrome). Document doesn't have a
-    // closest() method, so guard before calling it.
-    const target = typeof e.target?.closest === 'function' ? e.target.closest('abbr') : null;
+    // pointerup can fire with the bare Document as e.target (e.g. when
+    // the user lifts their finger outside any element). Document has
+    // no closest(), so optional-chain the call.
+    const target = e.target?.closest?.('abbr');
     if (!target) return;
 
     const col = getColumnForCell(target);
@@ -307,7 +315,17 @@ document.querySelector('#clear-cols').addEventListener('click', e => {
 document.querySelector('#apply-transformation').addEventListener('click', e => {
     const data = new Map();
     transformationsForm.querySelectorAll('input[type="number"]').forEach(el => {
-        data.set(el.getAttribute('name'), el.value);
+        // Coerce to Number so the value lands in finalData as a numeric
+        // type, which writeFinalDataToWorksheet then types as cell.t='n'.
+        // Without this, downstream stats software (SPSS, R, Excel) sees
+        // the recoded codes as text and silently mishandles them.
+        // Empty inputs become NaN; skip them so the cell keeps its
+        // pre-recode value instead of being clobbered with NaN.
+        const raw = el.value;
+        if (raw === '') return;
+        const num = Number(raw);
+        if (!Number.isFinite(num)) return;
+        data.set(el.getAttribute('name'), num);
     });
 
     const cols = transformationsForm.querySelector('input[name="cols"]').value;
