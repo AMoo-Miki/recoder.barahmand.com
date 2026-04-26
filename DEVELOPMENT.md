@@ -47,25 +47,55 @@ directly, so edits are picked up on refresh.
 
 ## Test
 
+The suite is layered. Lower layers are fast and run on every commit;
+higher layers are slower and reserved for `npm run test:all` / CI.
+
 ```sh
-npm test                # unit + integration; must stay 45 pass | 10 expected fail
-npm run test:unit       # just the pure logic
-npm run test:integration # just the jsdom DOM tests
-npm run test:watch      # vitest in watch mode
-npm run test:coverage   # with v8 coverage (text + html in coverage/)
+npm test                  # vitest: unit + integration (~1s, 90+ tests)
+npm run test:unit         # pure logic only
+npm run test:integration  # jsdom DOM tests (rendering, a11y, build)
+npm run test:watch        # vitest in watch mode
+npm run test:coverage     # v8 coverage (text + html in coverage/)
+
+npm run test:property     # fast-check property-based fuzz tests
+npm run test:fixtures     # tests against committed real-shape XLSX fixtures
+npm run test:adversarial  # CSV-injection, malformed XLSX, extreme sizes
+npm run test:perf         # performance budgets (fails on order-of-magnitude regressions)
+npm run test:a11y         # axe-core sweep + manual ARIA assertions
+
+npm run test:e2e          # Playwright cross-browser (Chromium + Firefox + WebKit)
+npm run test:e2e:chromium # Playwright on Chromium only (faster smoke check)
+npm run test:all          # vitest + Playwright; what CI runs
 ```
 
-E2E tests live under [`tests/e2e/`](tests/e2e/) and are driven through
-Playwright MCP — see [`tests/e2e/README.md`](tests/e2e/README.md) for
-the injection workflow. E2E is not part of `npm test` because it
-requires a live browser session.
+Each test layer covers something the others can't:
 
-The full test strategy and per-layer rationale is in
-[`tests/README.md`](tests/README.md). Read [`AGENTS.md`](AGENTS.md)
-before changing tests or adding features — the short version: pick the
-lowest test layer that proves the contract, no silent skips, and
-`BUG:` tests use Vitest's `it.fails()` so the suite stays green while
-real bugs are open.
+| Layer        | Where                                  | What it catches                                       |
+| ------------ | -------------------------------------- | ----------------------------------------------------- |
+| Unit         | `tests/unit/recoder.test.js`           | Pure-logic correctness against hand-written examples  |
+| Property     | `tests/unit/recoder.property.test.js`  | Invariants under randomly generated input             |
+| Fixtures     | `tests/unit/recoder.fixtures.test.js`  | Real-shape XLSX (Likert, multi-sheet, formulas, 1k×8) |
+| Adversarial  | `tests/unit/recoder.adversarial.test.js` | Hostile input: injection, huge cells, malformed bytes |
+| Perf         | `tests/unit/recoder.perf.test.js`      | Performance regressions on a 10k-row workbook         |
+| Bug regression | `tests/unit/recoder.bugs.test.js`    | Pin known bug fixes against re-introduction           |
+| Integration  | `tests/integration/index.dom.test.js`  | DOM rendering, XSS safety, reset / clear flows        |
+| Interactions | `tests/integration/index.interactions.test.js` | Drag-multi-select, drop-upload, edit-then-apply |
+| Build        | `tests/integration/build.test.js`      | dist/ shape, size budgets, no source maps leaked      |
+| A11y         | `tests/integration/index.a11y.test.js` | ARIA, labels, axe-core violations                     |
+| E2E (in-page) | `tests/e2e/run.js`                    | Pasteable into the live site for smoke tests          |
+| E2E (Playwright) | `tests/e2e/playwright/`            | Cross-browser parity + actual download round-trip     |
+
+Fixtures under [`tests/fixtures/`](tests/fixtures/) are committed
+binaries. Regenerate with:
+
+```sh
+npm run fixtures:regenerate
+```
+
+Read [`AGENTS.md`](AGENTS.md) before changing tests or adding features.
+Short version: pick the lowest test layer that proves the contract,
+fix bugs and convert their failing tests into regressions, no silent
+skips.
 
 ## Build
 

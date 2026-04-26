@@ -3,6 +3,12 @@
 .playwright-mcp/
 test-results.json
 
+# Playwright Test artifacts (HTML report, traces, downloaded files)
+/test-results
+/playwright-report
+/blob-report
+/playwright/.cache
+
 # Debugging/screenshot artifacts at the repo root.
 # (img/*.png and other tracked assets are unaffected.)
 /*.png

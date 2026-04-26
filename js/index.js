@@ -209,7 +209,7 @@ const getColumnForCell = el => {
 };
 
 const pointerDragged = e => {
-    if (!isPointerPressed) return;
+    if (isPointerPressed === false) return;
 
     const target = e.target.closest('abbr');
     if (!target || target.classList.contains('selected')) return;
@@ -257,7 +257,11 @@ excelDiv.addEventListener('pointerdown', e => {
 });
 
 document.addEventListener('pointerup', e => {
-    const target = e.target.closest('abbr');
+    // pointerup fires anywhere on the document, including on the bare
+    // Document node (e.g. when the user lifts their finger after a drag
+    // that started on the page chrome). Document doesn't have a
+    // closest() method, so guard before calling it.
+    const target = typeof e.target?.closest === 'function' ? e.target.closest('abbr') : null;
     if (!target) return;
 
     const col = getColumnForCell(target);

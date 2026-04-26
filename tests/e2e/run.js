@@ -367,10 +367,9 @@ window.__runTests = async function () {
     // First press + release on the same cell selects (pointerdown selects;
     // pointerup with wasColumnSelected=false leaves it selected).
     header.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    // Releasing on the document itself is now safe: the pointerup
+    // handler guards against targets without a closest() method.
     document.dispatchEvent(new Event('pointerup', { bubbles: true }));
-    // Workaround: the pointerup listener checks e.target.closest('abbr')
-    // which is null for a document-bubbled event, so we dispatch on the
-    // header itself.
     header.dispatchEvent(new Event('pointerup', { bubbles: true }));
     await sleep(20);
     eq('N1 column selected after click', readState().headers[0].selected, true);

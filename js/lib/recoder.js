@@ -29,9 +29,17 @@
     /**
      * Wraps each cell value into `{ value, lower }` for fast case-insensitive
      * lookup during recoding.
+     *
+     * Both fields are Unicode-normalised to NFC so that visually identical
+     * strings (e.g. precomposed "Café" vs. decomposed "Cafe\u0301") collapse
+     * to a single key — without this, two respondents who typed the same
+     * city name on different keyboards would get assigned separate codes.
      */
     function cookRows(rows) {
-        return rows.map(cols => cols.map(value => ({ value, lower: value?.toLowerCase() || '' })));
+        return rows.map(cols => cols.map(value => {
+            const normalized = value == null ? '' : String(value).normalize('NFC');
+            return { value: normalized, lower: normalized.toLowerCase() };
+        }));
     }
 
     /**

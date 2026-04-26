@@ -8,9 +8,11 @@ writing or modifying tests.
 ```sh
 npm install              # one time
 npm test                 # unit + integration; must pass before you commit
-npm run test:unit        # just the pure logic
-npm run test:integration # just the jsdom DOM tests
+npm run test:unit        # just the pure logic (incl. property/fixtures/adversarial/perf)
+npm run test:integration # just the jsdom DOM tests (incl. build/a11y/interactions)
 npm run test:coverage    # with v8 coverage (text + html)
+npm run test:e2e         # Playwright cross-browser (Chromium + Firefox + WebKit)
+npm run test:all         # what CI runs: vitest + Playwright
 npm run serve            # static server on :8765 (live source)
 npm run build            # produce dist/ with minified assets
 npm run serve:dist       # serve the built dist/ on :8765 (smoke test)
@@ -19,29 +21,48 @@ npm run serve:dist       # serve the built dist/ on :8765 (smoke test)
 CI (`.github/workflows/pages.yml`) runs `npm ci && npm test && npm run
 build`, then deploys `dist/` to GitHub Pages on every push to `main`.
 
-E2E lives in `tests/e2e/` and runs in a real browser via Playwright MCP —
-see [`tests/e2e/README.md`](tests/e2e/README.md). E2E is **not** part of
-`npm test`.
+The pasteable in-page e2e runner lives at `tests/e2e/run.js` and can
+be dropped into the live site via Playwright MCP `evaluate` for ad-hoc
+smoke tests — see [`tests/e2e/README.md`](tests/e2e/README.md). The
+Playwright cross-browser suite at `tests/e2e/playwright/` exercises the
+same `run.js` plus a real download round-trip.
 
 ## Directory layout
 
 ```
 tests/
-  helpers/        shared XLSX fixture builders
-  unit/           Vitest, node      — js/lib/recoder.js (pure logic)
-  integration/    Vitest, jsdom     — js/index.js (DOM wiring)
-  e2e/            browser-injected  — live page through Playwright
+  helpers/                shared XLSX fixture builders
+  fixtures/               committed real-shape XLSX binaries + generator
+  unit/                   Vitest, node      — js/lib/recoder.js (pure logic)
+    recoder.test.js                 happy-path + characterization
+    recoder.edge.test.js            empty / degenerate inputs
+    recoder.bugs.test.js            regression tests for fixed bugs
+    recoder.property.test.js        fast-check property-based fuzz
+    recoder.fixtures.test.js        loads tests/fixtures/*.xlsx
+    recoder.adversarial.test.js     CSV-injection, malformed XLSX, huge cells
+    recoder.perf.test.js            performance budgets (10k rows)
+  integration/            Vitest, jsdom     — js/index.js (DOM wiring)
+    index.dom.test.js               rendering, XSS safety, reset / clear
+    index.interactions.test.js      drag-multi-select, drop-upload, edit-then-apply
+    index.a11y.test.js              axe-core sweep + ARIA assertions
+    build.test.js                   dist/ shape, size budgets, source-map leak check
+  e2e/
+    run.js                          pasteable in-page runner (no framework)
+    playwright/                     Playwright cross-browser specs
 ```
 
-| File pattern                 | Layer        | Env    | Imports                          |
-| ---------------------------- | ------------ | ------ | -------------------------------- |
-| `tests/unit/*.test.js`       | unit         | node   | `../../js/lib/recoder.js`        |
-| `tests/integration/*.test.js`| integration  | jsdom  | `../../js/index.js` + `../../index.html` |
-| `tests/e2e/run.js`           | e2e          | browser| globals (`XLSX`, real DOM)       |
+| File pattern                                   | Layer            | Env     | Imports                                  |
+| ---------------------------------------------- | ---------------- | ------- | ---------------------------------------- |
+| `tests/unit/*.test.js`                         | unit             | node    | `../../js/lib/recoder.js`                |
+| `tests/integration/*.test.js`                  | integration      | jsdom   | `../../js/index.js` + `../../index.html` |
+| `tests/e2e/run.js`                             | e2e (in-page)    | browser | globals (`XLSX`, real DOM)               |
+| `tests/e2e/playwright/*.spec.mjs`              | e2e (Playwright) | browser | `@playwright/test`                       |
 
 `tests/helpers/fixtures.js` exports `buildWorkbook(aoa)` and
 `roundTrip(workbook)`. Use these in unit + integration tests instead of
-hand-rolling XLSX setup.
+hand-rolling XLSX setup. For tests that need a real-shape file (Likert,
+multi-sheet, formulas, 1k×8 rows), use the binaries committed under
+`tests/fixtures/` and regenerate via `npm run fixtures:regenerate`.
 
 ## Where to put a new test
 
@@ -100,20 +121,18 @@ write an e2e test for something jsdom can cover.
 
 ## Workflow before committing
 
-1. Run `npm test`. Confirm: 4 files, 55 tests — **45 passed | 10 expected
-   fail**, exit code 0. Any change in that count needs an explanation:
-   - Hard failures → you broke something. Fix it or document it.
-   - Fewer "expected fail" → either you fixed a bug (great — flip its
-     `.fails` off, move it out of `*.bugs.test.js` if appropriate, and
-     update this count) or you weakened a `BUG:` assertion (don't).
-   - More "expected fail" → you found a new bug; great, but it should be
-     a deliberate addition, not an accident.
+1. Run `npm test`. Every test must pass — `0 failed | 0 expected fail`.
+   The earlier convention of `it.fails()` markers for known bugs is
+   retired: every previously-failing case has been fixed and converted
+   into a regression test.
 2. If you touched `js/lib/recoder.js` or `js/index.js`, run
    `npm run test:coverage` and ensure your new lines are exercised.
-3. If you touched anything in the live UI flow (`index.html`, `js/index.js`,
-   `css/index.css`), also drive the e2e suite per
-   [`tests/e2e/README.md`](tests/e2e/README.md) before considering the
-   change shippable.
+3. If you changed the live UI flow (`index.html`, `js/index.js`,
+   `css/index.css`), also run `npm run test:e2e` (or at least
+   `npm run test:e2e:chromium`) — Playwright catches cross-browser
+   issues jsdom misses.
+4. Performance budgets in `tests/unit/recoder.perf.test.js` are sticky.
+   If you bump them, profile first and explain in the commit message.
 
 ## When tests fail
 
